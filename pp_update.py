@@ -87,6 +87,9 @@ def _token():
         if not r.ok:
             raise RuntimeError(f"Auth ShipHero falló {r.status_code}: {r.text[:300]}")
         return r.json()["access_token"]
+    if os.environ.get("GITHUB_ACTIONS"):
+        raise SystemExit("Faltan los secrets SHIPHERO_USERNAME y/o SHIPHERO_PASSWORD del repo "
+                         "(Settings → Secrets and variables → Actions → Repository secrets).")
     # En el PC: mismo cliente y credenciales (keyring) que el dashboard CPO
     sys.path.insert(0, str(BASE.parent))
     from shiphero_picks_packs import _get_token
