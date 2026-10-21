@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picks & Packs eDarkstore</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --pk:#2E75B6; --pk-l:#DCEAF7; --pa:#C55A11; --pa-l:#FCE4D6;
+  --cl:#1F3864; --cl-l:#D6DCE4;
+  --up:#107C41; --dn:#C00000; --warn:#C55A11;
+  --bg:#F4F6F9; --card:#fff; --border:#E0E6F0; --text:#1A1A2E; --muted:#6B7280;
+  --idle-bg:#FFF7F0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+header{background:var(--cl);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:19px;font-weight:700;letter-spacing:.2px}
+header .sub{font-size:12px;opacity:.8}
+header .right{margin-left:auto;text-align:right;display:flex;gap:18px;align-items:center}
+#clock{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+#updated{font-size:12px;line-height:1.35}
+#updated.stale{color:#FFD4A8;font-weight:600}
+main{padding:14px 20px 30px;max-width:1500px;margin:0 auto}
+.bar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.grp{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-right:2px}
+.chip{display:inline-flex;align-items:center;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid var(--cl-l);background:var(--card);color:var(--cl);user-select:none;transition:all .12s}
+.chip.active{background:var(--cl);border-color:var(--cl);color:#fff}
+.chip:not(.active):hover{border-color:var(--cl)}
+input[type=date],input[type=text]{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit}
+#rango{display:none;gap:6px;align-items:center}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center}
+.kpi .l{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.kpi .v{font-size:34px;font-weight:800;line-height:1.1;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11px;color:var(--muted);margin-top:2px}
+.kpi.main{border:2px solid var(--cl)}
+.kpi.main .v{color:var(--cl);font-size:42px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.card h2{font-size:13px;font-weight:700;color:var(--cl);margin-bottom:10px;display:flex;gap:10px;align-items:baseline}
+.card h2 .note{font-size:11px;font-weight:400;color:var(--muted)}
+.chart-box{position:relative;height:240px}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th{background:var(--cl);color:#fff;font-size:11px;font-weight:600;padding:8px 8px;text-align:right;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0}
+th.l,td.l{text-align:left}
+th .ar{color:#9DB0D0;font-size:10px;margin-left:3px}
+td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+tbody tr:nth-child(even) td{background:#FAFBFD}
+td.rank{color:var(--muted);font-weight:600;width:30px}
+td.name{font-weight:600}
+td.phr{font-weight:700;color:var(--cl)}
+td.prod{background:var(--cl-l)!important;font-weight:800;color:var(--cl);position:relative;min-width:110px}
+td.prod .b{position:absolute;left:0;top:4px;bottom:4px;background:rgba(31,56,100,.16);border-radius:0 3px 3px 0}
+td.prod span{position:relative}
+td.idle{background:var(--idle-bg)!important}
+tr.tot td{background:var(--cl-l)!important;font-weight:800;border-top:2px solid var(--cl)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#CBD2DC}
+.dot.on{background:var(--up);box-shadow:0 0 0 3px rgba(16,124,65,.18)}
+.foot{font-size:11px;color:var(--muted);line-height:1.55;margin-top:10px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+#err{display:none;background:#FDECEC;color:var(--dn);border:1px solid #F4B8B8;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px}
+/* Modo TV: ?tv=1 oculta filtros y agranda la letra para pantallas en bodega */
+body.tv .bar{display:none}
+body.tv{font-size:16px}
+body.tv table{font-size:17px}
+body.tv th{font-size:13px}
+body.tv .kpi .v{font-size:44px}
+body.tv .kpi.main .v{font-size:56px}
+@media (max-width:700px){
+  header{padding:10px 16px} main{padding:12px 16px 24px}
+  header .right{margin-left:0;width:100%;justify-content:space-between}
+  .kpi .v{font-size:26px} .kpi.main .v{font-size:32px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Picks &amp; Packs · Bodegas eDarkstore</h1>
+    <div class="sub" id="subtitle">Productividad de picking y packing</div>
+  </div>
+  <div class="right">
+    <div id="updated">Cargando…</div>
+    <div id="clock">--:--</div>
+  </div>
+</header>
+<main>
+  <div id="err"></div>
+  <div class="bar">
+    <div class="grp" id="g-modo"><span class="fl">Período</span></div>
+    <div class="grp" id="rango">
+      <input type="date" id="desde"> <span style="color:var(--muted)">a</span> <input type="date" id="hasta">
+    </div>
+    <div class="grp" id="g-wh"><span class="fl">Bodega</span></div>
+    <div class="grp" id="g-shift"><span class="fl">Turno</span></div>
+    <div class="grp" id="g-emp"><span class="fl">Empresa</span></div>
+    <div class="grp"><input type="text" id="search" placeholder="Buscar operario…" style="width:160px"></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2 id="chart-title">Avance por hora</h2>
+    <div class="chart-box"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2 id="tbl-title">Ranking de operarios</h2>
+    <div id="table"></div>
+    <div class="foot">
+      <b>Ped Pick</b> = pedidos pickeados (pedido + tote distintos) · <b>Ped Pack</b> = pedidos empacados ·
+      <b>Ped/Hr</b> = pedidos ÷ horas · <b>Prod/Hr</b> = promedio de Ped/Hr Pick y Ped/Hr Pack.
+      <b>Horas</b> = primera a última marca de cada turno, menos 1 h de colación cuando el turno supera 5 h
+      (mínimo 0,25 h; un turno se corta tras 3 h sin marcas; las marcas antes de las 07:00 son del turno nocturno del día anterior).
+      <b>Ocio</b> = jornada teórica − horas activas, promedio por día trabajado (Diurno XL 9 h · Diurno AM 5 h, si hubo menos de 5 h activas · Nocturno 8 h);
+      no se calcula para el día en curso. Mismas reglas que Productividad Producción del dashboard CPO D2C.
+      Sin Liquidos B2B ni Vitacura.
+    </div>
+  </div>
+</main>
+
+<script>
+var SHIFTS = ['Turno Diurno Semana', 'Turno Diurno Sabado', 'Turno Diurno Dom/Feriados', 'Turno Nocturno'];
+var SHIFT_LABELS = ['Diurno Semana', 'Diurno Sábado', 'Diurno Dom/Fer', 'Nocturno'];
+var MODES = [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['semana', 'Semana'], ['mes', 'Mes'], ['rango', 'Rango']];
+var EMPRESAS = [['todos', 'Todos'], ['propios', 'Propios'], ['zubale', 'Zubale']];
+var REFRESH_MS = 5 * 60 * 1000;
+var ACTIVO_MIN = 30;  // operario "activo" si tuvo una marca en los últimos 30 min de la data
+
+var DATA = null, chart = null;
+var st = {modo: 'hoy', wh: null, shifts: new Set(SHIFTS), emp: 'todos', sort: {col: 'prod_hr', dir: -1}};
+
+function fmt(n) { return Math.round(n).toLocaleString('es-CL'); }
+function f1(n) { return (Math.round(n * 10) / 10).toLocaleString('es-CL', {minimumFractionDigits: 1, maximumFractionDigits: 1}); }
+function esc(s) { return String(s).replace(/[&<>"]/g, function(c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function addDays(s, n) { var d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); }
+function whName(r) { return r.warehouse_name || String(r.warehouse_id); }
+
+// ── Estado en la URL: ?bodega=Las Parcelas&modo=hoy&tv=1 (un link por pantalla de bodega)
+function readUrl() {
+  var p = new URLSearchParams(location.search);
+  if (p.get('modo')) st.modo = p.get('modo');
+  if (p.get('bodega')) st.wh = new Set(p.get('bodega').split(','));
+  if (p.get('empresa')) st.emp = p.get('empresa');
+  if (p.get('tv') === '1') document.body.classList.add('tv');
+}
+function writeUrl() {
+  var p = new URLSearchParams(location.search);
+  p.set('modo', st.modo);
+  if (st.wh && st.wh.size < allWh().length) p.set('bodega', Array.from(st.wh).join(',')); else p.delete('bodega');
+  if (st.emp !== 'todos') p.set('empresa', st.emp); else p.delete('empresa');
+  history.replaceState(null, '', location.pathname + '?' + p.toString());
+}
+
+function allWh() {
+  var seen = {};
+  Object.keys(DATA.months).forEach(function(m) { (DATA.months[m].data || []).forEach(function(r) { seen[whName(r)] = 1; }); });
+  return Object.keys(seen).sort();
+}
+
+function range() {
+  var t = DATA.today;
+  if (st.modo === 'hoy') return [t, t];
+  if (st.modo === 'ayer') return [addDays(t, -1), addDays(t, -1)];
+  if (st.modo === 'semana') {
+    var wd = (new Date(t + 'T12:00:00').getDay() + 6) % 7;  // 0 = lunes
+    return [addDays(t, -wd), t];
+  }
+  if (st.modo === 'mes') return [t.slice(0, 8) + '01', t];
+  return [document.getElementById('desde').value || t, document.getElementById('hasta').value || t];
+}
+
+// ── Filtros
+function chips(id, items, isActive, onClick) {
+  var g = document.getElementById(id);
+  g.querySelectorAll('.chip').forEach(function(c) { c.remove(); });
+  items.forEach(function(it) {
+    var c = document.createElement('span');
+    c.className = 'chip' + (isActive(it[0]) ? ' active' : '');
+    c.textContent = it[1];
+    c.onclick = function() { onClick(it[0]); render(); };
+    g.appendChild(c);
+  });
+}
+function buildFilters() {
+  var whs = allWh();
+  if (!st.wh) st.wh = new Set(whs);
+  chips('g-modo', MODES, function(k) { return st.modo === k; }, function(k) { st.modo = k; });
+  document.getElementById('rango').style.display = st.modo === 'rango' ? 'flex' : 'none';
+  chips('g-wh', [['__all', 'Todas']].concat(whs.map(function(w) { return [w, w]; })),
+    function(k) { return k === '__all' ? st.wh.size === whs.length : st.wh.has(k) && st.wh.size < whs.length; },
+    function(k) {
+      if (k === '__all') st.wh = new Set(whs);
+      else if (st.wh.size === whs.length) st.wh = new Set([k]);
+      else if (st.wh.has(k)) { if (st.wh.size > 1) st.wh.delete(k); }
+      else st.wh.add(k);
+    });
+  chips('g-shift', SHIFTS.map(function(s, i) { return [s, SHIFT_LABELS[i]]; }),
+    function(k) { return st.shifts.has(k); },
+    function(k) { if (st.shifts.has(k)) { if (st.shifts.size > 1) st.shifts.delete(k); } else st.shifts.add(k); });
+  chips('g-emp', EMPRESAS, function(k) { return st.emp === k; }, function(k) { st.emp = k; });
+}
+
+function empOk(name) {
+  var z = name.toLowerCase().indexOf('zubale') >= 0;
+  return st.emp === 'todos' || (st.emp === 'zubale' ? z : !z);
+}
+
+// ── Render
+function render() {
+  if (!DATA) return;
+  buildFilters();
+  writeUrl();
+  var r = range(), desde = r[0], hasta = r[1];
+  var search = document.getElementById('search').value.toLowerCase().trim();
+
+  var all = [];
+  Object.keys(DATA.months).forEach(function(m) {
+    (DATA.months[m].data || []).forEach(function(x) { if (x.date >= desde && x.date <= hasta) all.push(x); });
+  });
+  var rows = all.filter(function(x) { return st.shifts.has(x.shift) && st.wh.has(whName(x)) && empOk(x.picker_name); });
+
+  // Ocio: misma regla que el CPO, por operario-día sumando bodegas; el día en curso no se evalúa
+  var AM_TH = 5.0, J_NOC = 8.0, J_XL = 9.0, J_AM = 5.0, MIN_MED = 0.26;
+  var dayKey = function(x) { return x.picker_name + '||' + x.date + '||' + x.shift; };
+  var dayH = {};
+  all.forEach(function(x) {
+    if (!st.shifts.has(x.shift) || x.date >= DATA.today) return;
+    dayH[dayKey(x)] = (dayH[dayKey(x)] || 0) + x.hours;
+  });
+  var dayIdle = {};
+  Object.keys(dayH).forEach(function(k) {
+    var h = dayH[k], sh = k.split('||')[2];
+    if (h < MIN_MED) return;
+    var j = sh === 'Turno Nocturno' ? J_NOC : (h < AM_TH ? J_AM : J_XL);
+    dayIdle[k] = {j: j, idle: Math.max(0, j - h)};
+  });
+
+  var by = {};
+  rows.forEach(function(x) {
+    var k = x.picker_name + '||' + x.warehouse_id;
+    if (!by[k]) by[k] = {picker_name: x.picker_name, wh_name: whName(x), wh_id: x.warehouse_id, picks: 0, packs: 0, picks_uds: 0, packs_uds: 0, hours: 0, days: {}};
+    var v = by[k];
+    v.picks += x.picks; v.packs += x.packs; v.picks_uds += x.picks_uds; v.packs_uds += x.packs_uds; v.hours += x.hours;
+    v.days[dayKey(x)] = 1;
+  });
+  var list = Object.keys(by).map(function(k) {
+    var v = by[k];
+    v.picks_phr = v.hours > 0 ? v.picks / v.hours : 0;
+    v.packs_phr = v.hours > 0 ? v.packs / v.hours : 0;
+    v.prod_hr = (v.picks_phr + v.packs_phr) / 2;
+    var dks = Object.keys(v.days).filter(function(d) { return dayIdle[d]; });
+    var is = 0, js = 0;
+    dks.forEach(function(d) { is += dayIdle[d].idle; js += dayIdle[d].j; });
+    v.dayKeys = dks;
+    v.idle_h = dks.length ? is / dks.length : null;
+    v.idle_pct = js > 0 ? Math.round(100 * is / js) : null;
+    v.last = (DATA.last_event || {})[v.picker_name + '||' + v.wh_id] || '';
+    return v;
+  });
+  if (search) list = list.filter(function(v) { return v.picker_name.toLowerCase().indexOf(search) >= 0; });
+
+  var c = st.sort.col, d = st.sort.dir;
+  list.sort(function(a, b) {
+    var av = a[c], bv = b[c];
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    if (typeof av === 'string') return d * av.localeCompare(bv, 'es', {sensitivity: 'base'});
+    return d * (av - bv);
+  });
+
+  var T = {picks: 0, packs: 0, hours: 0, is: 0, js: 0, nd: 0}, seen = {};
+  list.forEach(function(v) {
+    T.picks += v.picks; T.packs += v.packs; T.hours += v.hours;
+    v.dayKeys.forEach(function(k) { if (!seen[k]) { seen[k] = 1; T.is += dayIdle[k].idle; T.js += dayIdle[k].j; T.nd++; } });
+  });
+  T.picks_phr = T.hours > 0 ? T.picks / T.hours : 0;
+  T.packs_phr = T.hours > 0 ? T.packs / T.hours : 0;
+  T.prod_hr = (T.picks_phr + T.packs_phr) / 2;
+
+  var single = desde === hasta;
+  var periodo = single ? fechaLarga(desde) : fechaCorta(desde) + ' – ' + fechaCorta(hasta);
+  var whTxt = st.wh.size === allWh().length ? 'Todas las bodegas' : Array.from(st.wh).join(' · ');
+  document.getElementById('subtitle').textContent = whTxt + ' · ' + periodo;
+
+  renderKpis(T, list, single);
+  renderTable(list, T, desde);
+  renderChart(desde, hasta);
+}
+
+function fechaLarga(s) {
+  var t = new Date(s + 'T12:00:00').toLocaleDateString('es-CL', {weekday: 'long', day: 'numeric', month: 'long'});
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function fechaCorta(s) { return new Date(s + 'T12:00:00').toLocaleDateString('es-CL', {day: 'numeric', month: 'short'}); }
+
+function isActive(last) {
+  if (!last || !DATA.generated) return false;
+  var g = new Date(DATA.generated.replace(' ', 'T')), l = new Date(last.replace(' ', 'T'));
+  return (g - l) / 60000 <= ACTIVO_MIN;
+}
+
+function renderKpis(T, list, single) {
+  var live = st.modo === 'hoy';
+  var activos = live ? list.filter(function(v) { return isActive(v.last); }).length : null;
+  var k = function(l, v, s, cls, color) {
+    return '<div class="kpi ' + (cls || '') + '"><div class="l">' + l + '</div><div class="v"' + (color ? ' style="color:' + color + '"' : '') + '>' + v + '</div><div class="s">' + s + '</div></div>';
+  };
+  document.getElementById('kpis').innerHTML =
+    k('Prod/Hr', list.length ? f1(T.prod_hr) : '—', 'pedidos por hora', 'main') +
+    k('Ped/Hr Pick', list.length ? f1(T.picks_phr) : '—', 'pedidos pickeados por hora', '', 'var(--pk)') +
+    k('Ped/Hr Pack', list.length ? f1(T.packs_phr) : '—', 'pedidos empacados por hora', '', 'var(--pa)') +
+    k('Pedidos pickeados', fmt(T.picks), single ? 'en el día' : 'en el período', '', 'var(--pk)') +
+    k('Pedidos empacados', fmt(T.packs), single ? 'en el día' : 'en el período', '', 'var(--pa)') +
+    k(live ? 'Operarios activos' : 'Operarios', live ? activos + '<span style="font-size:.5em;color:var(--muted)"> / ' + list.length + '</span>' : list.length,
+      live ? 'con marca en los últimos ' + ACTIVO_MIN + ' min' : 'con picks o packs');
+}
+
+function renderTable(list, T, desde) {
+  var live = st.modo === 'hoy';
+  var showIdle = desde < DATA.today;
+  document.getElementById('tbl-title').innerHTML = 'Ranking de operarios <span class="note">' + list.length + ' operarios · clic en una columna para ordenar</span>';
+  if (!list.length) { document.getElementById('table').innerHTML = '<div class="empty">Sin picks ni packs para los filtros seleccionados.</div>'; return; }
+  var th = function(col, label, cls) {
+    var a = st.sort.col === col ? (st.sort.dir < 0 ? '▼' : '▲') : '⇅';
+    return '<th class="' + (cls || '') + '" data-col="' + col + '">' + label + '<span class="ar">' + a + '</span></th>';
+  };
+  var max = Math.max.apply(null, list.map(function(v) { return v.prod_hr; }).concat([1]));
+  var multiWh = st.wh.size > 1;
+  var h = '<div class="tbl-wrap"><table><thead><tr><th class="l">#</th>' + th('picker_name', 'Operario', 'l');
+  if (multiWh) h += th('wh_name', 'Bodega', 'l');
+  h += th('picks', 'Ped Pick') + th('picks_phr', 'Ped/Hr Pick') + th('packs', 'Ped Pack') + th('packs_phr', 'Ped/Hr Pack') +
+       th('prod_hr', 'Prod/Hr') + th('hours', 'Horas');
+  if (showIdle) h += th('idle_h', 'Ocio');
+  if (live) h += th('last', 'Última marca');
+  h += '</tr></thead><tbody>';
+  list.forEach(function(v, i) {
+    h += '<tr><td class="l rank">' + (i + 1) + '</td><td class="l name">' + (live ? '<span class="dot' + (isActive(v.last) ? ' on' : '') + '"></span>' : '') + esc(v.picker_name) + '</td>';
+    if (multiWh) h += '<td class="l">' + esc(v.wh_name) + '</td>';
+    h += '<td>' + fmt(v.picks) + '</td><td class="phr">' + f1(v.picks_phr) + '</td><td>' + fmt(v.packs) + '</td><td class="phr">' + f1(v.packs_phr) + '</td>' +
+         '<td class="prod"><div class="b" style="width:' + (100 * v.prod_hr / max).toFixed(0) + '%"></div><span>' + f1(v.prod_hr) + '</span></td>' +
+         '<td>' + f1(v.hours) + '</td>';
+    if (showIdle) h += idleCell(v.idle_h, v.idle_pct);
+    if (live) h += '<td>' + (v.last ? v.last.slice(11) : '') + '</td>';
+    h += '</tr>';
+  });
+  h += '<tr class="tot"><td></td><td class="l">TOTAL</td>' + (multiWh ? '<td></td>' : '') +
+       '<td>' + fmt(T.picks) + '</td><td>' + f1(T.picks_phr) + '</td><td>' + fmt(T.packs) + '</td><td>' + f1(T.packs_phr) + '</td>' +
+       '<td class="prod"><span>' + f1(T.prod_hr) + '</span></td><td>' + f1(T.hours) + '</td>';
+  if (showIdle) h += idleCell(T.nd ? T.is / T.nd : null, T.js > 0 ? Math.round(100 * T.is / T.js) : null);
+  if (live) h += '<td></td>';
+  h += '</tr></tbody></table></div>';
+  var el = document.getElementById('table');
+  el.innerHTML = h;
+  el.querySelectorAll('th[data-col]').forEach(function(t) {
+    t.onclick = function() {
+      var col = t.getAttribute('data-col');
+      if (st.sort.col === col) st.sort.dir *= -1;
+      else st.sort = {col: col, dir: (col === 'picker_name' || col === 'wh_name') ? 1 : -1};
+      render();
+    };
+  });
+}
+
+function idleCell(h, pct) {
+  if (h === null || pct === null) return '<td class="idle" style="color:var(--muted)" title="Sin días cerrados con ventana medible">—</td>';
+  var col = pct >= 30 ? 'var(--dn)' : (pct >= 15 ? 'var(--warn)' : 'var(--text)');
+  return '<td class="idle" style="color:' + col + ';font-weight:700">' + f1(h) + ' h <span style="font-weight:400;color:var(--muted);font-size:.85em">(' + pct + '%)</span></td>';
+}
+
+function renderChart(desde, hasta) {
+  if (chart) { chart.destroy(); chart = null; }
+  var ctx = document.getElementById('chart');
+  var title = document.getElementById('chart-title');
+  var ds, labels, opts;
+  var base = {responsive: true, maintainAspectRatio: false, animation: false, interaction: {mode: 'index', intersect: false},
+              plugins: {legend: {position: 'bottom', labels: {boxWidth: 12}}}, scales: {x: {grid: {display: false}}, y: {beginAtZero: true, grid: {color: '#EEF1F6'}}}};
+
+  if (desde === hasta && desde === DATA.today) {
+    // Avance por hora del día en curso: pedidos pickeados y empacados en cada hora
+    var hr = {};
+    (DATA.hourly || []).forEach(function(x) {
+      if (!st.wh.has(whName(x))) return;
+      if (!hr[x.hour]) hr[x.hour] = {pk: 0, pa: 0};
+      hr[x.hour].pk += x.picks; hr[x.hour].pa += x.packs;
+    });
+    var hs = Object.keys(hr).map(Number);
+    var h0 = Math.min.apply(null, hs.concat([9])), h1 = Math.max.apply(null, hs.concat([new Date().getHours()]));
+    labels = []; var pk = [], pa = [];
+    for (var h = h0; h <= h1; h++) { labels.push(String(h).padStart(2, '0') + ':00'); pk.push(hr[h] ? hr[h].pk : 0); pa.push(hr[h] ? hr[h].pa : 0); }
+    ds = [{label: 'Pedidos pickeados', data: pk, backgroundColor: '#2E75B6', borderRadius: 3},
+          {label: 'Pedidos empacados', data: pa, backgroundColor: '#C55A11', borderRadius: 3}];
+    title.innerHTML = 'Avance por hora <span class="note">pedidos de los turnos de hoy, por hora</span>';
+    chart = new Chart(ctx, {type: 'bar', data: {labels: labels, datasets: ds}, options: base});
+    return;
+  }
+
+  // Tendencia diaria: Ped/Hr Pick, Ped/Hr Pack y Prod/Hr del equipo
+  var d0 = desde === hasta ? addDays(desde, -13) : desde;
+  var days = {};
+  Object.keys(DATA.months).forEach(function(m) {
+    (DATA.months[m].daily || []).forEach(function(x) {
+      if (x.date < d0 || x.date > hasta || !st.shifts.has(x.shift) || !st.wh.has(whName(x))) return;
+      if (!days[x.date]) days[x.date] = {pk: 0, pa: 0, h: 0};
+      days[x.date].pk += x.picks; days[x.date].pa += x.packs; days[x.date].h += x.hours;
+    });
+  });
+  labels = Object.keys(days).sort();
+  var dpk = labels.map(function(k) { return days[k].h ? +(days[k].pk / days[k].h).toFixed(1) : null; });
+  var dpa = labels.map(function(k) { return days[k].h ? +(days[k].pa / days[k].h).toFixed(1) : null; });
+  var dpr = labels.map(function(k, i) { return dpk[i] === null ? null : +((dpk[i] + dpa[i]) / 2).toFixed(1); });
+  ds = [{label: 'Prod/Hr', data: dpr, borderColor: '#1F3864', backgroundColor: '#1F3864', borderWidth: 3, tension: .25},
+        {label: 'Ped/Hr Pick', data: dpk, borderColor: '#2E75B6', backgroundColor: '#2E75B6', borderWidth: 2, borderDash: [5, 4], tension: .25},
+        {label: 'Ped/Hr Pack', data: dpa, borderColor: '#C55A11', backgroundColor: '#C55A11', borderWidth: 2, borderDash: [5, 4], tension: .25}];
+  title.innerHTML = 'Productividad diaria <span class="note">pedidos por hora del equipo' + (desde === hasta ? ' · últimos 14 días' : '') + ' · el día de hoy va en curso</span>';
+  labels = labels.map(function(k) { return new Date(k + 'T12:00:00').toLocaleDateString('es-CL', {weekday: 'short', day: 'numeric'}); });
+  chart = new Chart(ctx, {type: 'line', data: {labels: labels, datasets: ds}, options: base});
+}
+
+// ── Carga y refresco
+function load() {
+  fetch('data/data.json?t=' + Date.now(), {cache: 'no-store'})
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j) {
+      var first = !DATA;
+      DATA = j;
+      document.getElementById('err').style.display = 'none';
+      if (first) {
+        document.getElementById('desde').value = DATA.today.slice(0, 8) + '01';
+        document.getElementById('hasta').value = DATA.today;
+      }
+      var age = (Date.now() - new Date(DATA.generated.replace(' ', 'T')).getTime()) / 3600000;
+      var u = document.getElementById('updated');
+      u.className = age > 1.75 && inWindow() ? 'stale' : '';
+      u.innerHTML = 'Actualizado ' + DATA.generated.slice(11) + ' · ' + fechaCorta(DATA.generated.slice(0, 10)) +
+                    '<br><span style="opacity:.8">se actualiza cada hora 9:30–18:30</span>';
+      render();
+    })
+    .catch(function(e) {
+      var el = document.getElementById('err');
+      el.textContent = 'No se pudieron cargar los datos (' + e.message + '). Se reintenta en 5 minutos.';
+      el.style.display = 'block';
+    });
+}
+function inWindow() { var n = new Date(), m = n.getHours() * 60 + n.getMinutes(); return m >= 600 && m <= 1170; }
+function tick() { document.getElementById('clock').textContent = new Date().toLocaleTimeString('es-CL', {hour: '2-digit', minute: '2-digit'}); }
+
+readUrl();
+['desde', 'hasta', 'search'].forEach(function(id) { document.getElementById(id).addEventListener('input', render); });
+tick(); setInterval(tick, 15000);
+load(); setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>

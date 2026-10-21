@@ -1,0 +1,41 @@
+# Actualiza data/data.json desde la API de ShipHero cada hora 9:30-18:30 (hora Chile).
+# El cron va en UTC y cubre horario de verano (UTC-3) e invierno (UTC-4); pp_update.py
+# descarta las corridas que caen fuera de la ventana.
+name: Actualizar picks y packs
+
+on:
+  schedule:
+    - cron: "30 12-22 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pandas requests
+      - name: Bajar picks y packs
+        env:
+          SHIPHERO_USERNAME: ${{ secrets.SHIPHERO_USERNAME }}
+          SHIPHERO_PASSWORD: ${{ secrets.SHIPHERO_PASSWORD }}
+          TZ: America/Santiago
+        run: python pp_update.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+      - name: Publicar
+        run: |
+          git config user.name "picks-packs-bot"
+          git config user.email "picks-packs-bot@users.noreply.github.com"
+          git add data/data.json
+          git diff --cached --quiet && echo "Sin cambios" && exit 0
+          git commit -m "datos $(TZ=America/Santiago date '+%Y-%m-%d %H:%M')"
+          git push
