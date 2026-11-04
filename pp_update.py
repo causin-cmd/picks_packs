@@ -32,7 +32,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 
-from productividad_calc import calculate
+from productividad_calc import calculate, WAREHOUSE_NAMES
 
 BASE = Path(__file__).resolve().parent
 DATA_FILE = BASE / "data" / "data.json"
@@ -194,46 +194,45 @@ def fetch(d0, d1):
 # Avance por hora del día
 # ---------------------------------------------------------------------------
 
-def hourly(pk, pa, day):
+def hourly(pk, pa, days):
     """
-    Picks/packs por bodega y hora local de los turnos con fecha `day` (gráfico de avance de
-    Hoy). Usa la misma asignación de sesiones que productividad_calc, así las marcas de la
+    Avance por hora de los turnos con fecha en `days` (gráfico de un día suelto):
+    {"YYYY-MM-DD": [[warehouse_id, hora, picks, packs, picks_uds, packs_uds], ...]}.
+    Usa la misma asignación de sesiones que productividad_calc, así las marcas de la
     madrugada quedan en el turno nocturno del día anterior, igual que en la tabla.
     """
-    from productividad_calc import WAREHOUSE_NAMES, _prep_events, _assign_sessions
+    from productividad_calc import _prep_events, _assign_sessions
     empty = pd.DataFrame(columns=["user_first_name", "user_last_name", "warehouse_id", "created_at"])
     pk = _prep_events(pk if pk is not None else empty)
     pa = _prep_events(pa if pa is not None else empty)
     _assign_sessions(pk, pa)
-    pk = pk[pk["shift_date"] == day] if not pk.empty else None
-    pa = pa[pa["shift_date"] == day] if not pa.empty else None
+    days = set(days)
     acc = {}
 
-    def bucket(wh, h):
-        k = (int(wh), int(h))
-        if k not in acc:
-            acc[k] = {"warehouse_id": k[0], "warehouse_name": WAREHOUSE_NAMES.get(k[0], str(k[0])),
-                      "hour": k[1], "picks": 0, "picks_uds": 0, "packs": 0, "packs_uds": 0}
-        return acc[k]
+    def bucket(d, wh, h):
+        return acc.setdefault((str(d), int(wh), int(h)), [int(wh), int(h), 0, 0, 0, 0])
 
-    if pk is not None:
-        p = pk.copy()
+    if not pk.empty:
+        p = pk[pk["shift_date"].isin(days)].copy()
         p["order_tote"] = p["order_id"].astype(str) + "|" + p["tote_id"].astype(str)
         p["hour"] = p["created_at"].dt.hour
-        # Un pedido cuenta en la hora de su primera marca de pick
-        first = p.sort_values("created_at").drop_duplicates(["warehouse_id", "order_tote"])
-        for (wh, h), n in first.groupby(["warehouse_id", "hour"]).size().items():
-            bucket(wh, h)["picks"] += int(n)
-        for (wh, h), n in p.groupby(["warehouse_id", "hour"])["picked_quantity"].sum().items():
-            bucket(wh, h)["picks_uds"] += int(n)
-    if pa is not None:
-        p = pa.copy()
+        # Un pedido cuenta en la hora de su primera marca de pick de cada turno (igual que la tabla)
+        first = p.sort_values("created_at").drop_duplicates(["session", "order_tote"])
+        for (d, wh, h), n in first.groupby(["shift_date", "warehouse_id", "hour"]).size().items():
+            bucket(d, wh, h)[2] += int(n)
+        for (d, wh, h), n in p.groupby(["shift_date", "warehouse_id", "hour"])["picked_quantity"].sum().items():
+            bucket(d, wh, h)[4] += int(n)
+    if not pa.empty:
+        p = pa[pa["shift_date"].isin(days)].copy()
         p["hour"] = p["created_at"].dt.hour
-        for (wh, h), g in p.groupby(["warehouse_id", "hour"]):
-            b = bucket(wh, h)
-            b["packs"] += len(g)
-            b["packs_uds"] += int(g["total_items"].sum())
-    return sorted(acc.values(), key=lambda r: (r["warehouse_id"], r["hour"]))
+        for (d, wh, h), g in p.groupby(["shift_date", "warehouse_id", "hour"]):
+            b = bucket(d, wh, h)
+            b[3] += len(g)
+            b[5] += int(g["total_items"].sum())
+    out = {}
+    for (d, _, _), row in sorted(acc.items()):
+        out.setdefault(d, []).append(row)
+    return out
 
 
 def last_events(pk, pa):
@@ -298,11 +297,20 @@ def main():
     for m in sorted(months)[:-MESES_GUARDADOS]:
         del months[m]
 
+    # Avance por hora: se recalculan los mismos días que el histórico. Formato antiguo
+    # (lista solo de hoy) se descarta.
+    por_hora = data.get("hourly") if isinstance(data.get("hourly"), dict) else {}
+    dias = [desde + timedelta(days=i) for i in range((today - desde).days + 1)]
+    por_hora = {d: v for d, v in por_hora.items() if not (desde.isoformat() <= d <= today.isoformat())}
+    por_hora.update(hourly(pk, pa, dias))
+    por_hora = {d: por_hora[d] for d in sorted(por_hora) if d[:7] in months}
+
     data = {
         "generated": now.strftime("%Y-%m-%d %H:%M"),
         "today": today.isoformat(),
         "months": months,
-        "hourly": hourly(pk, pa, today),
+        "wh_names": {str(k): v for k, v in WAREHOUSE_NAMES.items() if k not in EXCLUIDAS},
+        "hourly": por_hora,
         "last_event": last_events(pk, pa),
     }
     DATA_FILE.parent.mkdir(exist_ok=True)

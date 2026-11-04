@@ -380,27 +380,43 @@ function renderChart(desde, hasta) {
   var base = {responsive: true, maintainAspectRatio: false, animation: false, interaction: {mode: 'index', intersect: false},
               plugins: {legend: {position: 'bottom', labels: {boxWidth: 12}}}, scales: {x: {grid: {display: false}}, y: {beginAtZero: true, grid: {color: '#EEF1F6'}}}};
 
-  if (desde === hasta && desde === DATA.today) {
-    // Avance por hora del día en curso: pedidos pickeados y empacados en cada hora
+  ctx.style.display = '';
+  var msg = document.getElementById('chart-msg');
+  if (msg) msg.remove();
+
+  if (desde === hasta) {
+    // Un día suelto: pedidos pickeados y empacados en cada hora de los turnos de ese día
+    // (filas [bodega, hora, picks, packs, picks_uds, packs_uds])
+    var rowsH = (DATA.hourly || {})[desde];
+    var esHoy = desde === DATA.today;
+    title.innerHTML = 'Avance por hora <span class="note">pedidos de los turnos ' + (esHoy ? 'de hoy' : 'del ' + fechaCorta(desde)) + ', por hora</span>';
+    if (!rowsH) {
+      ctx.style.display = 'none';
+      ctx.insertAdjacentHTML('afterend', '<div id="chart-msg" class="empty">Sin detalle por hora para este día.</div>');
+      return;
+    }
+    // Las horas antes de las 07:00 son la madrugada siguiente (turno nocturno): van al final
     var hr = {};
-    (DATA.hourly || []).forEach(function(x) {
-      if (!st.wh.has(whName(x))) return;
-      if (!hr[x.hour]) hr[x.hour] = {pk: 0, pa: 0};
-      hr[x.hour].pk += x.picks; hr[x.hour].pa += x.packs;
+    rowsH.forEach(function(x) {
+      var wn = (DATA.wh_names || {})[x[0]] || String(x[0]);
+      if (!st.wh.has(wn)) return;
+      var k = x[1] < 7 ? x[1] + 24 : x[1];
+      if (!hr[k]) hr[k] = {pk: 0, pa: 0};
+      hr[k].pk += x[2]; hr[k].pa += x[3];
     });
     var hs = Object.keys(hr).map(Number);
-    var h0 = Math.min.apply(null, hs.concat([9])), h1 = Math.max.apply(null, hs.concat([new Date().getHours()]));
+    var h0 = Math.min.apply(null, hs.concat([9]));
+    var h1 = Math.max.apply(null, hs.concat(esHoy ? [new Date().getHours()] : [h0]));
     labels = []; var pk = [], pa = [];
-    for (var h = h0; h <= h1; h++) { labels.push(String(h).padStart(2, '0') + ':00'); pk.push(hr[h] ? hr[h].pk : 0); pa.push(hr[h] ? hr[h].pa : 0); }
+    for (var h = h0; h <= h1; h++) { labels.push(String(h % 24).padStart(2, '0') + ':00'); pk.push(hr[h] ? hr[h].pk : 0); pa.push(hr[h] ? hr[h].pa : 0); }
     ds = [{label: 'Pedidos pickeados', data: pk, backgroundColor: '#2E75B6', borderRadius: 3},
           {label: 'Pedidos empacados', data: pa, backgroundColor: '#C55A11', borderRadius: 3}];
-    title.innerHTML = 'Avance por hora <span class="note">pedidos de los turnos de hoy, por hora</span>';
     chart = new Chart(ctx, {type: 'bar', data: {labels: labels, datasets: ds}, options: base});
     return;
   }
 
-  // Tendencia diaria: Ped/Hr Pick, Ped/Hr Pack y Prod/Hr del equipo
-  var d0 = desde === hasta ? addDays(desde, -13) : desde;
+  // Tendencia diaria del período: Ped/Hr Pick, Ped/Hr Pack y Prod/Hr del equipo
+  var d0 = desde;
   var days = {};
   Object.keys(DATA.months).forEach(function(m) {
     (DATA.months[m].daily || []).forEach(function(x) {
@@ -416,7 +432,7 @@ function renderChart(desde, hasta) {
   ds = [{label: 'Prod/Hr', data: dpr, borderColor: '#1F3864', backgroundColor: '#1F3864', borderWidth: 3, tension: .25},
         {label: 'Ped/Hr Pick', data: dpk, borderColor: '#2E75B6', backgroundColor: '#2E75B6', borderWidth: 2, borderDash: [5, 4], tension: .25},
         {label: 'Ped/Hr Pack', data: dpa, borderColor: '#C55A11', backgroundColor: '#C55A11', borderWidth: 2, borderDash: [5, 4], tension: .25}];
-  title.innerHTML = 'Productividad diaria <span class="note">pedidos por hora del equipo' + (desde === hasta ? ' · últimos 14 días' : '') + ' · el día de hoy va en curso</span>';
+  title.innerHTML = 'Productividad diaria <span class="note">pedidos por hora del equipo' + (hasta >= DATA.today ? ' · el día de hoy va en curso' : '') + '</span>';
   labels = labels.map(function(k) { return new Date(k + 'T12:00:00').toLocaleDateString('es-CL', {weekday: 'short', day: 'numeric'}); });
   chart = new Chart(ctx, {type: 'line', data: {labels: labels, datasets: ds}, options: base});
 }

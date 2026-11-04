@@ -23,7 +23,8 @@ Validado el 21-oct-2026: turnos 18–20 oct idénticos al CPO (55 registros oper
 
 - `pp_update.py` — baja picks/packs de ShipHero, calcula y reemplaza en `data/data.json`
   los turnos desde ayer (o desde la última corrida, si quedó atrás) hasta hoy. Guarda el mes
-  actual y los dos anteriores.
+  actual y los dos anteriores, más el avance por hora de cada día (gráfico de un día suelto;
+  sep–oct rellenado desde la caché del CPO, sin los días donde la caché no cuadra con la tabla).
 - `index.html` — la página (estática, lee `data/data.json`).
 - `.github/workflows/update.yml` — cron horario (copia de referencia: `workflow_update.yml`). Ejecutar a mano: pestaña Actions →
   "Actualizar picks y packs" → Run workflow.
